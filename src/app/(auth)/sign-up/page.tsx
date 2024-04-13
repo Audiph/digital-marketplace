@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 import { Icons } from '@/components/Icons';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -15,8 +16,10 @@ import {
   TAuthCredentialsValidator,
 } from '@/lib/validators/account-credentials-validator';
 import { trpc } from '@/trpc/client';
+import { ZodError } from 'zod';
+import { useRouter } from 'next/navigation';
 
-const page = () => {
+const SignUp = () => {
   const {
     register,
     handleSubmit,
@@ -25,7 +28,28 @@ const page = () => {
     resolver: zodResolver(AuthCredentialsValidator),
   });
 
-  const { mutate, isLoading } = trpc.auth.createPayloadUser.useMutation({});
+  const router = useRouter();
+
+  const { mutate, isLoading } = trpc.auth.createPayloadUser.useMutation({
+    onError: (err) => {
+      if (err.data?.code === 'CONFLICT') {
+        toast.error('This email is already in use. Sign in instead?');
+        return;
+      }
+
+      if (err instanceof ZodError) {
+        toast.error(err.issues[0].message);
+        return;
+      }
+
+      return toast.error('Something went wrong. Please try again.');
+    },
+
+    onSuccess: ({ sentToEmail }) => {
+      toast.success(`Verification email sent to ${sentToEmail}`);
+      router.push('/verify-email?to=' + sentToEmail);
+    },
+  });
 
   const onSubmit = ({ email, password }: TAuthCredentialsValidator) => {
     mutate({ email, password });
@@ -62,6 +86,11 @@ const page = () => {
                     })}
                     placeholder="you@your-domain.com"
                   />
+                  {errors?.email && (
+                    <p className="text-sm text-red-500">
+                      {errors.email.message}
+                    </p>
+                  )}
                 </div>
                 <div className="grid gap-1 py-2">
                   <Label htmlFor="password">Password</Label>
@@ -73,6 +102,11 @@ const page = () => {
                     })}
                     placeholder="Your password"
                   />
+                  {errors?.password && (
+                    <p className="text-sm text-red-500">
+                      {errors.password.message}
+                    </p>
+                  )}
                 </div>
                 <Button>Sign up</Button>
               </div>
@@ -84,4 +118,4 @@ const page = () => {
   );
 };
 
-export default page;
+export default SignUp;
